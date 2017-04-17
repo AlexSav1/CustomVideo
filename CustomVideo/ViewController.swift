@@ -13,73 +13,152 @@ class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDele
 
     var captureSession = AVCaptureSession()
     
-    var previewLayer:CALayer?
+    var previewLayer:CALayer!
     
-    var capDevice:AVCaptureDevice!
+    var captureDevice:AVCaptureDevice!
     
-    /*
-    lazy var previewLayer: AVCaptureVideoPreviewLayer = {
-        let preview =  AVCaptureVideoPreviewLayer(session: self.cameraSession)
-        preview?.bounds = CGRect(x: 0, y: 0, width: self.view.bounds.width, height: self.view.bounds.height)
-        preview?.position = CGPoint(x: self.view.bounds.midX, y: self.view.bounds.midY)
-        preview?.videoGravity = AVLayerVideoGravityResize
-        return preview!
-    }()
-    */
+    var takePhoto = false
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        self.prepareCamera()
-        
-        /*
-        self.cameraSession.sessionPreset = AVCaptureSessionPresetHigh
-        
-        let captureDevice = AVCaptureDevice.defaultDevice(withMediaType: AVMediaTypeVideo) as AVCaptureDevice
-
-        
-        do {
-            let deviceInput = try AVCaptureDeviceInput(device: captureDevice)
-            
-            cameraSession.beginConfiguration() // 1
-            
-            if (cameraSession.canAddInput(deviceInput) == true) {
-                cameraSession.addInput(deviceInput)
-            }
-            
-            let dataOutput = AVCaptureVideoDataOutput() // 2
-            
-            dataOutput.videoSettings = [(kCVPixelBufferPixelFormatTypeKey as NSString) : NSNumber(value: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange as UInt32)] // 3
-            
-            dataOutput.alwaysDiscardsLateVideoFrames = true // 4
-            
-            if (cameraSession.canAddOutput(dataOutput) == true) {
-                cameraSession.addOutput(dataOutput)
-            }
-            
-            cameraSession.commitConfiguration() //5
-            
-            let queue = DispatchQueue(label: "com.invasivecode.videoQueue") // 6
-            dataOutput.setSampleBufferDelegate(self, queue: queue) // 7
-            
-        }
-        catch let error as NSError {
-            NSLog("\(error), \(error.localizedDescription)")
-        }
-        */
-        
     }
 
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        self.prepareCamera()
+    }
+    
     func prepareCamera(){
         
-        self.captureSession.sessionPreset = AVCaptureSessionPresetHigh
+        self.captureSession.sessionPreset = AVCaptureSessionPresetPhoto
+        
+        if let availableDevices = AVCaptureDeviceDiscoverySession(deviceTypes: [.builtInWideAngleCamera], mediaType: AVMediaTypeVideo, position: .back).devices {
+            
+            self.captureDevice = availableDevices.first
+            self.beginSession()
+        }
         
     }
 
-
-    @IBAction func recordButtonPressed(_ sender: Any) {
+    func beginSession() {
+        
+        do{
+            let captureDeviceInput = try AVCaptureDeviceInput(device: self.captureDevice)
+            
+            self.captureSession.addInput(captureDeviceInput)
+            
+        } catch{
+            print(error.localizedDescription)
+        }
+        
+        if let prevLayer = AVCaptureVideoPreviewLayer(session: self.captureSession){
+            self.previewLayer = prevLayer
+            self.view.layer.addSublayer(self.previewLayer)
+            self.previewLayer?.frame = self.view.layer.frame
+            self.captureSession.startRunning()
+            
+            let dataOutput = AVCaptureVideoDataOutput()
+            dataOutput.videoSettings = [(kCVPixelBufferPixelFormatTypeKey as NSString): NSNumber(value: kCVPixelFormatType_32BGRA)]
+            
+            dataOutput.alwaysDiscardsLateVideoFrames = true
+            
+            if self.captureSession.canAddOutput(dataOutput){
+                self.captureSession.addOutput(dataOutput)
+            }
+            
+            self.captureSession.commitConfiguration()
+            
+            
+            let queue = DispatchQueue(label: "alexsavitt.captureQueue")
+            dataOutput.setSampleBufferDelegate(self, queue: queue)
+            
+            
+        }
         
         
     }
+    
+    @IBAction func takePhotoPressed(_ sender: Any) {
+        self.takePhoto = true
+    }
+    
+    
+    func captureOutput(_ captureOutput: AVCaptureOutput!, didOutputSampleBuffer sampleBuffer: CMSampleBuffer!, from connection: AVCaptureConnection!) {
+        
+        if (self.takePhoto == true){
+            self.takePhoto = false
+            
+            if let image = self.getImageFromSampleBuffer(buffer: sampleBuffer){
+                
+                    let photoVC = UIStoryboard(name: "Main", bundle: nil).instantiateViewController(withIdentifier: "PhotoVC") as! PhotoViewController
+                    
+                    photoVC.takenPhoto = image
+                
+                    DispatchQueue.main.async {
+                        self.present(photoVC, animated: true, completion: { 
+                            self.stopCaptureSession()
+                        })
+                    }
+            }
+        }
+        
+    }
+
+    
+    func getImageFromSampleBuffer(buffer: CMSampleBuffer) -> UIImage? {
+        
+        if let pixelBuffer = CMSampleBufferGetImageBuffer(buffer){
+            let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+            let context = CIContext()
+            
+            let imageRect = CGRect(x: 0, y: 0, width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
+            
+            if let image = context.createCGImage(ciImage, from: imageRect){
+                return UIImage(cgImage: image, scale: UIScreen.main.scale, orientation: .right)
+            }
+            
+        }
+     
+        return nil
+    }
+    
+    func stopCaptureSession(){
+        self.captureSession.stopRunning()
+        
+        if let inputs = self.captureSession.inputs as? [AVCaptureDeviceInput]{
+            for input in inputs{
+                self.captureSession.removeInput(input)
+            }
+        }
+    }
+    
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
