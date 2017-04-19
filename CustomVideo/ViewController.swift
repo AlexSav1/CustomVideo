@@ -21,6 +21,7 @@ class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDele
     
     override func viewDidLoad() {
         super.viewDidLoad()
+    
         
     }
 
@@ -98,6 +99,7 @@ class ViewController: UIViewController, AVCaptureVideoDataOutputSampleBufferDele
                     DispatchQueue.main.async {
                         self.present(photoVC, animated: true, completion: { 
                             self.stopCaptureSession()
+                            //try doing same thing with segue
                         })
                     }
             }
